@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>主播数据看板</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Microsoft YaHei',sans-serif;background:#0f1923;color:#e0e0e0;min-height:100vh}
+
+.drop-zone{margin:20px 28px;border:2px dashed #3a5068;border-radius:14px;padding:40px 20px;text-align:center;cursor:pointer;transition:all .3s;background:#152230}
+.drop-zone:hover,.drop-zone.drag-over{border-color:#42a5f5;background:#1a3040}
+.drop-zone.has-data{border-color:#66bb6a;border-style:solid;padding:14px 20px}
+.drop-zone .dz-icon{font-size:48px;margin-bottom:10px;display:block}
+.drop-zone .dz-title{font-size:17px;font-weight:600;color:#b0bec5;margin-bottom:4px}
+.drop-zone .dz-sub{font-size:12px;color:#546e7a}
+.drop-zone .dz-success{display:none;color:#66bb6a;font-size:14px;font-weight:600}
+.drop-zone.has-data .dz-success{display:block}
+.drop-zone.has-data .dz-prompt{display:none}
+.drop-zone .dz-reload{display:none;margin-top:6px;font-size:12px;color:#78909c;background:#243447;border:1px solid #3a5068;padding:5px 14px;border-radius:6px;cursor:pointer}
+.drop-zone.has-data .dz-reload{display:inline-block}
+
+.header{background:linear-gradient(135deg,#1a2a3a 0%,#0f1923 100%);padding:18px 28px;border-bottom:1px solid #2a3a4a}
+.header h1{font-size:20px;font-weight:700;background:linear-gradient(90deg,#64b5f6,#42a5f5);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+#main-content{display:none}
+#main-content.show{display:block}
+
+.filter-bar{display:flex;gap:10px;padding:14px 28px;flex-wrap:wrap;align-items:center;background:#152230;border-bottom:1px solid #1e2d3d}
+.filter-bar label{font-size:12px;color:#78909c}
+.filter-bar select,.filter-bar input{background:#243447;border:1px solid #2a3a4a;color:#e0e0e0;padding:7px 12px;border-radius:6px;font-size:12px;outline:none}
+.filter-bar select{min-width:150px}
+.filter-bar input{min-width:200px}
+.filter-bar select:focus,.filter-bar input:focus{border-color:#42a5f5}
+
+.kpi-row{display:flex;gap:12px;padding:14px 28px;flex-wrap:wrap}
+.kpi{background:#1a2a3a;border:1px solid #2a3a4a;border-radius:10px;padding:14px 18px;min-width:140px;flex:1}
+.kpi .l{font-size:10px;color:#78909c;letter-spacing:1px}
+.kpi .v{font-size:22px;font-weight:700;margin-top:4px}
+.kpi .s{font-size:10px;color:#546e7a;margin-top:2px}
+.kpi.blue .v{color:#42a5f5}
+.kpi.green .v{color:#66bb6a}
+.kpi.orange .v{color:#ff9800}
+.kpi.purple .v{color:#ab47bc}
+
+.panel{background:#1a2a3a;border:1px solid #2a3a4a;border-radius:12px;overflow:hidden;margin:0 28px 16px}
+.panel-header{padding:12px 16px;border-bottom:1px solid #2a3a4a;font-size:13px;font-weight:600;color:#b0bec5;display:flex;align-items:center;gap:8px;justify-content:space-between}
+.panel-body{padding:12px}
+.chart{width:100%;height:400px}
+
+.table-wrap{max-height:65vh;overflow:auto}
+.table-wrap table{width:100%;border-collapse:collapse;font-size:12px}
+.table-wrap thead th{background:#243447;color:#90a4ae;padding:9px 10px;text-align:left;font-weight:500;position:sticky;top:0;z-index:1;white-space:nowrap}
+.table-wrap tbody td{padding:7px 10px;border-bottom:1px solid #1e2d3d;white-space:nowrap}
+.table-wrap tbody tr:hover td{background:rgba(66,165,245,0.06)}
+.table-wrap tbody tr.clickable{cursor:pointer}
+.table-wrap tbody tr.clickable:hover td{background:rgba(66,165,245,0.15)}
+.num{text-align:right}
+
+.breadcrumb{padding:10px 28px;color:#78909c;font-size:12px}
+.breadcrumb a{color:#42a5f5;cursor:pointer;text-decoration:none}
+.breadcrumb a:hover{text-decoration:underline}
+
+.footer{text-align:center;padding:16px;color:#546e7a;font-size:11px}
+</style>
+</head>
+<body>
+
+<div class="header"><h1>🎙️ 主播数据看板</h1></div>
+
+<div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+  <span class="dz-prompt">
+    <span class="dz-icon">📂</span>
+    <div class="dz-title">拖拽 Excel 文件到此处</div>
+    <div class="dz-sub">支持 .xlsx / .xls · 选择日期范围查看所有主播业绩</div>
+  </span>
+  <div class="dz-success">✅ 数据已加载！<span id="dz-info"></span></div>
+  <button class="dz-reload" onclick="event.stopPropagation();document.getElementById('fileInput').click();">🔄 重新上传</button>
+  <input type="file" id="fileInput" accept=".xlsx,.xls" style="display:none" onchange="handleFile(this.files[0])">
+</div>
+
+<div id="main-content">
+  <div class="filter-bar">
+    <label>📅 日期：</label>
+    <select id="selFrom" onchange="render()"></select>
+    <span style="color:#546e7a">至</span>
+    <select id="selTo" onchange="render()"></select>
+    <label style="margin-left:16px">🔍 主播：</label>
+    <input type="text" id="searchBox" placeholder="输入主播名模糊搜索…" oninput="render()">
+  </div>
+
+  <div class="kpi-row" id="kpiRow"></div>
+  <div id="viewArea"></div>
+  <div class="footer">拖拽 Excel 即用 · 全 0 自动剔除 · 数据仅本地处理</div>
+</div>
+
+<script>
+// ============================================
+// 🔒 到期日期：过了这天看板自动失效
+// 修改 EXPIRE_DATE 即可延期
+// ============================================
+var EXPIRE_DATE = '2026-07-15';
+if(Date.now() > new Date(EXPIRE_DATE+'T23:59:59').getTime()){
+  document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;color:#78909c;font-size:18px;font-family:sans-serif;background:#0f1923;text-align:center"><div>⛔ 看板已过期<br><span style="font-size:14px;color:#546e7a">请联系数据提供方获取最新版本</span></div></div>';
+  throw new Error('expired');
+}
+
+var SUMMARY=[], DAILY=[];
+
+// ===== 上传 =====
+var dz=document.getElementById('dropZone');
+['dragenter','dragover'].forEach(e=>dz.addEventListener(e,ev=>{ev.preventDefault();dz.classList.add('drag-over')}));
+['dragleave','drop'].forEach(e=>dz.addEventListener(e,ev=>{ev.preventDefault();dz.classList.remove('drag-over')}));
+dz.addEventListener('drop',e=>{var f=e.dataTransfer.files[0];if(f)loadFile(f)});
+function handleFile(f){if(f)loadFile(f)}
+
+function loadFile(f){
+  var r=new FileReader();
+  r.onload=function(e){
+    try{
+      var wb=XLSX.read(e.target.result,{type:'array'});
+      var ns=wb.SheetNames;
+      var s1=ns[0], s3=ns[2]||ns[1]||ns[0];
+      for(var i=0;i<ns.length;i++){
+        var n=ns[i];
+        if(n.indexOf('明细')>=0 && n.indexOf('场次')<0 && n.indexOf('按天')<0) s1=n;
+        if(n.indexOf('按天')>=0) s3=n;
+      }
+      SUMMARY=XLSX.utils.sheet_to_json(wb.Sheets[s1],{defval:''});
+      DAILY=XLSX.utils.sheet_to_json(wb.Sheets[s3],{defval:''});
+      console.log('Loaded:',SUMMARY.length,'anchors |',DAILY.length,'daily');
+
+      dz.classList.add('has-data');
+      document.getElementById('dz-info').textContent=' '+SUMMARY.length+' 名主播 · '+DAILY.length+' 条每日记录';
+      document.getElementById('main-content').classList.add('show');
+
+      initDates();
+      if(window._chart){window._chart.dispose();window._chart=null;}
+      render();
+    }catch(err){console.error(err);alert('解析失败: '+err.message);}
+  };
+  r.readAsArrayBuffer(f);
+}
+
+// ===== 工具 =====
+function toNum(v){
+  if(v===null||v===undefined||v==='') return 0;
+  if(typeof v==='number') return v;
+  var s=String(v).replace(/,/g,'').replace(/"/g,'').trim();
+  var n=parseFloat(s); return isNaN(n)?0:n;
+}
+function trim(v){return v?String(v).trim():'';}
+function durH(v){
+  if(!v) return 0;
+  var s=String(v),t=0,h=s.match(/(\d+)小时/),m=s.match(/(\d+)分钟/);
+  if(h)t+=parseInt(h[1])*60; if(m)t+=parseInt(m[1]); return t/60;
+}
+function normDate(v){
+  if(!v) return '';
+  if(typeof v==='number'){var dt=new Date((v-25569)*86400*1000);return dt.getFullYear()+'-'+pad(dt.getMonth()+1)+'-'+pad(dt.getDate());}
+  var s=String(v).trim();
+  if(/^\d{8}$/.test(s)) return s.slice(0,4)+'-'+s.slice(4,6)+'-'+s.slice(6,8);
+  if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  var m2=s.match(/(\d{4})[^\d]?(\d{2})[^\d]?(\d{2})/); if(m2) return m2[1]+'-'+m2[2]+'-'+m2[3];
+  return s;
+}
+function pad(n){return n<10?'0'+n:''+n;}
+function fy(v){return'¥'+(v/10000).toFixed(2)+'w';}
+function findCol(cols,keys){for(var i=0;i<keys.length;i++)for(var j=0;j<cols.length;j++)if(cols[j].indexOf(keys[i])>=0) return cols[j];return keys[0];}
+
+var allDates=[], dateRevMap={}, anchorInfoMap={};
+
+function initDates(){
+  var dCols=DAILY.length>0?Object.keys(DAILY[0]):[];
+  var cDate=findCol(dCols,['日期']);
+  var cRev=findCol(dCols,['本公会多人直播直播流水','多人直播流水','流水']);
+
+  dateRevMap={}; allDates=[];
+  for(var i=0;i<DAILY.length;i++){
+    var d=normDate(DAILY[i][cDate]); if(!d) continue;
+    var rev=toNum(DAILY[i][cRev]);
+    if(!dateRevMap[d]) dateRevMap[d]=0; dateRevMap[d]+=rev;
+    if(allDates.indexOf(d)<0) allDates.push(d);
+  }
+  allDates.sort();
+
+  var sf=document.getElementById('selFrom'), st=document.getElementById('selTo');
+  var ops=allDates.map(function(d){return'<option value="'+d+'">'+d+(dateRevMap[d]>0?' (¥'+(dateRevMap[d]/10000).toFixed(1)+'w)':'')+'</option>';}).join('');
+  sf.innerHTML=ops; st.innerHTML=ops;
+
+  var withData=allDates.filter(function(d){return dateRevMap[d]>0;});
+  if(withData.length>0){sf.value=withData[0];st.value=withData[withData.length-1];}
+  else if(allDates.length>0){sf.value=allDates[0];st.value=allDates[allDates.length-1];}
+
+  // 主播信息表
+  var sCols=SUMMARY.length>0?Object.keys(SUMMARY[0]):[];
+  var sName=findCol(sCols,['主播名称','主播昵称']);
+  var sFans=findCol(sCols,['粉丝数','粉丝量']);
+  var sBroker=findCol(sCols,['经纪人名称','经纪人']);
+  var sCert=findCol(sCols,['是否提报主播','提报']);
+  anchorInfoMap={};
+  for(var i=0;i<SUMMARY.length;i++){
+    var r=SUMMARY[i], nm=trim(r[sName]); if(!nm||anchorInfoMap[nm]) continue;
+    anchorInfoMap[nm]={fans:toNum(r[sFans]),broker:trim(r[sBroker])||'无',certified:trim(r[sCert])==='是'};
+  }
+}
+
+// ===== 渲染 =====
+var currentView='list'; // 'list' | 'detail'
+var currentAnchor='';
+
+function render(){
+  if(currentView==='detail'){showDetail(currentAnchor);return;}
+
+  var from=document.getElementById('selFrom').value;
+  var to=document.getElementById('selTo').value;
+  var search=trim(document.getElementById('searchBox').value).toLowerCase();
+  if(!from||!to) return;
+
+  var dCols=DAILY.length>0?Object.keys(DAILY[0]):[];
+  var cDate=findCol(dCols,['日期']);
+  var cName=findCol(dCols,['主播昵称','主播名称']);
+  var cRev=findCol(dCols,['本公会多人直播直播流水','多人直播流水','流水']);
+  var cNormal=findCol(dCols,['普通礼物流水','普通流水']);
+  var cLucky=findCol(dCols,['幸运值礼物流水','幸运值流水']);
+  var cDur=findCol(dCols,['上麦时长']);
+
+  // 按日期范围 + 搜索 汇总主播
+  var amap={}, dtrend={};
+  for(var i=0;i<DAILY.length;i++){
+    var r=DAILY[i];
+    var d=normDate(r[cDate]); if(d<from||d>to) continue;
+    var nm=trim(r[cName]); if(!nm||(search&&nm.toLowerCase().indexOf(search)<0)) continue;
+    var rev=toNum(r[cRev]);
+    if(!amap[nm]){
+      var inf=anchorInfoMap[nm]||{fans:0,broker:'无',certified:false};
+      amap[nm]={name:nm,fans:inf.fans,broker:inf.broker,certified:inf.certified,revenue:0,normal:0,lucky:0,dur:0,days:{}};
+    }
+    amap[nm].revenue+=rev;
+    amap[nm].normal+=toNum(r[cNormal]);
+    amap[nm].lucky+=toNum(r[cLucky]);
+    amap[nm].dur+=durH(r[cDur]);
+    if(d) amap[nm].days[d]=true;
+
+    if(!dtrend[d]) dtrend[d]=0; dtrend[d]+=rev;
+  }
+
+  var anchors=Object.values(amap).map(function(a){a.dayCount=Object.keys(a.days).length;return a;}).sort(function(a,b){return b.revenue-a.revenue;});
+  var activeAnchors=anchors.filter(function(a){return a.revenue>0;});
+  var zeroAnchors=anchors.length-activeAnchors.length;
+  var totalRev=anchors.reduce(function(s,a){return s+a.revenue;},0);
+  var avgAll=anchors.length?Math.round(totalRev/anchors.length):0;
+  var avgActive=activeAnchors.length?Math.round(totalRev/activeAnchors.length):0;
+  var tdates=Object.keys(dtrend).sort();
+  var tdata=tdates.map(function(d){return dtrend[d];});
+
+  // KPI
+  document.getElementById('kpiRow').innerHTML=
+    '<div class="kpi blue"><div class="l">📅 '+from+' ~ '+to+'</div><div class="v">'+activeAnchors.length+'<span style="font-size:12px;color:#66bb6a">活跃</span> <span style="font-size:12px;color:#546e7a">/ '+anchors.length+' 总计</span></div><div class="s">'+tdates.length+' 天有流水 · '+zeroAnchors+' 人流水为0</div></div>'+
+    '<div class="kpi green"><div class="l">💰 总流水</div><div class="v">¥'+(totalRev/10000).toFixed(1)+'<span style="font-size:12px;color:#78909c">万</span></div><div class="s">¥'+totalRev.toLocaleString('zh-CN',{maximumFractionDigits:0})+'</div></div>'+
+    '<div class="kpi orange"><div class="l">📊 人均流水 <select onchange="switchAvg(this.value)" style="margin-left:4px;padding:2px 4px;font-size:10px;background:#1a2a3a;border:1px solid #3a5068;color:#78909c;border-radius:3px"><option value="active">活跃('+activeAnchors.length+'人)</option><option value="all">全部('+anchors.length+'人)</option></select></div><div class="v" id="avgVal">¥'+avgActive.toLocaleString()+'</div><div class="s">活跃人均 ¥'+avgActive.toLocaleString()+' · 全部人均 ¥'+avgAll.toLocaleString()+'</div></div>'+
+    '<div class="kpi purple"><div class="l">🏆 TOP流水</div><div class="v">'+(anchors[0]?fy(anchors[0].revenue):'¥0')+'</div><div class="s">'+(anchors[0]?anchors[0].name+' · 活跃'+anchors[0].dayCount+'天 · '+(anchors[0].fans/1000).toFixed(1)+'k粉':'-')+'</div></div>';
+  window._avgActive=avgActive; window._avgAll=avgAll;
+
+  // 图 + 表
+  var h='<div class="panel"><div class="panel-header"><span>📈 每日流水趋势</span></div><div class="panel-body"><div class="chart" id="chartMain"></div></div></div>';
+  h+='<div class="panel"><div class="panel-header"><span>📋 全部主播（'+anchors.length+' 人 · 点击查看每日明细）</span></div><div class="table-wrap"><table><thead><tr><th>#</th><th>主播名称</th><th class="num">粉丝</th><th>提报</th><th>经纪人</th><th class="num">流水(元)</th><th class="num">普通礼物</th><th class="num">幸运礼物</th><th class="num">上麦(h)</th><th class="num">活跃天</th></tr></thead><tbody>';
+  for(var i=0;i<anchors.length;i++){
+    var a=anchors[i];
+    h+='<tr class="clickable" onclick="showDetail(\''+esc(a.name)+'\')"><td style="color:#546e7a">'+(i+1)+'</td><td style="font-weight:500;color:#42a5f5">'+a.name+'</td><td class="num">'+(a.fans||0).toLocaleString()+'</td><td>'+(a.certified?'<span style="color:#ff9800">✅是</span>':'否')+'</td><td>'+a.broker+'</td><td class="num" style="color:#66bb6a">¥'+a.revenue.toLocaleString('zh-CN',{minimumFractionDigits:2})+'</td><td class="num">¥'+a.normal.toLocaleString('zh-CN',{minimumFractionDigits:2})+'</td><td class="num">¥'+a.lucky.toLocaleString('zh-CN',{minimumFractionDigits:2})+'</td><td class="num">'+a.dur.toFixed(1)+'</td><td class="num">'+a.dayCount+'</td></tr>';
+  }
+  h+='</tbody></table></div></div>';
+  document.getElementById('viewArea').innerHTML=h;
+
+  // 图表
+  setTimeout(function(){
+    var el=document.getElementById('chartMain'); if(!el) return;
+    if(window._chart) window._chart.dispose();
+    window._chart=echarts.init(el);
+    var dl=tdates.map(function(d){return d.slice(5);});
+    window._chart.setOption({
+      backgroundColor:'#1a2a3a',
+      tooltip:{trigger:'axis'},
+      grid:{left:60,right:20,top:20,bottom:30},
+      xAxis:{type:'category',data:dl.length?dl:['-'],axisLabel:{color:'#90a4ae',fontSize:10,rotate:dl.length>10?35:0}},
+      yAxis:{type:'value',axisLabel:{color:'#78909c',formatter:fy},splitLine:{lineStyle:{color:'#1e2d3d'}}},
+      series:[
+        {type:'bar',data:tdata.length?tdata:[0],itemStyle:{color:new echarts.graphic.LinearGradient(0,0,0,1,[{offset:0,color:'#42a5f5'},{offset:1,color:'#1565c0'}]),borderRadius:[4,4,0,0]}},
+        {type:'line',data:tdata.length?tdata:[0],lineStyle:{color:'#ff7043',width:2},symbol:'circle',symbolSize:5,smooth:true,itemStyle:{color:'#ff7043'}}
+      ]
+    });
+  },200);
+}
+
+function switchAvg(mode){
+  var v=mode==='all'?window._avgAll:window._avgActive;
+  document.getElementById('avgVal').textContent='¥'+v.toLocaleString();
+}
+function esc(s){return s.replace(/'/g,"\\'").replace(/"/g,'&quot;');}
+
+// ===== 主播每日明细 =====
+function showDetail(anchorName){
+  currentView='detail'; currentAnchor=anchorName;
+
+  var from=document.getElementById('selFrom').value;
+  var to=document.getElementById('selTo').value;
+
+  var dCols=DAILY.length>0?Object.keys(DAILY[0]):[];
+  var cDate=findCol(dCols,['日期']);
+  var cName=findCol(dCols,['主播昵称','主播名称']);
+  var cRev=findCol(dCols,['本公会多人直播直播流水','多人直播流水','流水']);
+  var cNormal=findCol(dCols,['普通礼物流水','普通流水']);
+  var cLucky=findCol(dCols,['幸运值礼物流水','幸运值流水']);
+  var cDur=findCol(dCols,['上麦时长']);
+
+  var rows=[];
+  for(var i=0;i<DAILY.length;i++){
+    var r=DAILY[i];
+    if(trim(r[cName])!==anchorName) continue;
+    var d=normDate(r[cDate]); if(d<from||d>to) continue;
+    rows.push({date:d,revenue:toNum(r[cRev]),normal:toNum(r[cNormal]),lucky:toNum(r[cLucky]),dur:durH(r[cDur])});
+  }
+  rows.sort(function(a,b){return a.date.localeCompare(b.date);});
+
+  var inf=anchorInfoMap[anchorName]||{fans:0,broker:'无',certified:false};
+  var totalRev=rows.reduce(function(s,r){return s+r.revenue;},0);
+  var activeDays=rows.filter(function(r){return r.revenue>0;}).length;
+  var chartData=rows.filter(function(r){return r.revenue>0;});
+
+  // 面包屑
+  document.getElementById('kpiRow').innerHTML=
+    '<div class="breadcrumb"><a onclick="currentView=\'list\';render()">📋 全部主播</a> ▸ <span style="color:#e0e0e0">'+anchorName+'</span></div>'+
+    '<div class="kpi blue"><div class="l">🎙️ '+anchorName+'</div><div class="v">'+(inf.certified?'⭐':'')+'</div><div class="s">粉丝 '+(inf.fans||0).toLocaleString()+' · '+inf.broker+' · '+(inf.certified?'提报':'未提报')+'</div></div>'+
+    '<div class="kpi green"><div class="l">💰 总流水</div><div class="v">'+(totalRev/10000).toFixed(2)+'<span style="font-size:12px;color:#78909c">万</span></div><div class="s">¥'+totalRev.toLocaleString('zh-CN',{maximumFractionDigits:0})+'</div></div>'+
+    '<div class="kpi orange"><div class="l">📅 活跃</div><div class="v">'+activeDays+'<span style="font-size:12px;color:#78909c">/'+rows.length+'天</span></div><div class="s">日均 ¥'+(activeDays>0?Math.round(totalRev/activeDays).toLocaleString():0)+'</div></div>'+
+    '<div class="kpi purple"><div class="l">🎁 礼物</div><div class="v">¥'+(rows.reduce(function(s,r){return s+r.normal;},0)/10000).toFixed(1)+'<span style="font-size:12px;color:#78909c">万</span></div><div class="s">普通'+fy(rows.reduce(function(s,r){return s+r.normal;},0))+' 幸运'+fy(rows.reduce(function(s,r){return s+r.lucky;},0))+'</div></div>';
+
+  var h='<div class="panel"><div class="panel-header"><span>📈 '+anchorName+' 每日流水</span></div><div class="panel-body"><div class="chart" id="chartDetail"></div></div></div>';
+  h+='<div class="panel"><div class="panel-header"><span>📋 每日明细（'+rows.length+' 天，'+activeDays+' 天有流水）</span></div><div class="table-wrap"><table><thead><tr><th>日期</th><th class="num">流水(元)</th><th class="num">普通礼物</th><th class="num">幸运礼物</th><th class="num">上麦(h)</th></tr></thead><tbody>';
+  for(var i=0;i<rows.length;i++){
+    var rw=rows[i];
+    h+='<tr><td>'+rw.date+'</td><td class="num" style="color:'+(rw.revenue>0?'#66bb6a':'#546e7a')+'">¥'+rw.revenue.toLocaleString('zh-CN',{minimumFractionDigits:2})+'</td><td class="num">¥'+rw.normal.toLocaleString('zh-CN',{minimumFractionDigits:2})+'</td><td class="num">¥'+rw.lucky.toLocaleString('zh-CN',{minimumFractionDigits:2})+'</td><td class="num">'+rw.dur.toFixed(1)+'</td></tr>';
+  }
+  h+='</tbody></table></div></div>';
+  document.getElementById('viewArea').innerHTML=h;
+
+  setTimeout(function(){
+    var el=document.getElementById('chartDetail'); if(!el) return;
+    if(window._detailChart) window._detailChart.dispose();
+    window._detailChart=echarts.init(el);
+    var dl=chartData.map(function(r){return r.date.slice(5);});
+    var dv=chartData.map(function(r){return r.revenue;});
+    window._detailChart.setOption({
+      backgroundColor:'#1a2a3a',
+      tooltip:{trigger:'axis'},
+      grid:{left:60,right:20,top:20,bottom:30},
+      xAxis:{type:'category',data:dl.length?dl:['-'],axisLabel:{color:'#90a4ae',fontSize:10,rotate:dl.length>8?35:0}},
+      yAxis:{type:'value',axisLabel:{color:'#78909c',formatter:fy},splitLine:{lineStyle:{color:'#1e2d3d'}}},
+      series:[
+        {type:'bar',data:dv.length?dv:[0],itemStyle:{color:new echarts.graphic.LinearGradient(0,0,0,1,[{offset:0,color:'#42a5f5'},{offset:1,color:'#1565c0'}]),borderRadius:[4,4,0,0]}},
+        {type:'line',data:dv.length?dv:[0],lineStyle:{color:'#ff7043',width:2},symbol:'circle',symbolSize:5,smooth:true,itemStyle:{color:'#ff7043'}}
+      ]
+    });
+  },200);
+}
+
+window.addEventListener('resize',function(){
+  if(window._chart) try{window._chart.resize()}catch(e){}
+  if(window._detailChart) try{window._detailChart.resize()}catch(e){}
+});
+</script>
+</body>
+</html>
