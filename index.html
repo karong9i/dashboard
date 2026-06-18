@@ -96,16 +96,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Microsoft YaHei',sans-serif;b
 </div>
 
 <script>
-// ============================================
-// 🔒 到期日期：过了这天看板自动失效
-// 修改 EXPIRE_DATE 即可延期
-// ============================================
-var EXPIRE_DATE = '2026-07-15';
-if(Date.now() > new Date(EXPIRE_DATE+'T23:59:59').getTime()){
-  document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;color:#78909c;font-size:18px;font-family:sans-serif;background:#0f1923;text-align:center"><div>⛔ 看板已过期<br><span style="font-size:14px;color:#546e7a">请联系数据提供方获取最新版本</span></div></div>';
-  throw new Error('expired');
-}
-
 var SUMMARY=[], DAILY=[];
 
 // ===== 上传 =====
