@@ -67,6 +67,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Microsoft YaHei',sans-serif;b
 </head>
 <body>
 
+<div id="loginOverlay" style="display:flex;align-items:center;justify-content:center;position:fixed;top:0;left:0;width:100%;height:100%;background:#0f1923;z-index:9999;flex-direction:column">
+<div style="background:#1a2a3a;border:1px solid #2a3a4a;border-radius:12px;padding:40px;text-align:center;min-width:320px">
+<div style="font-size:48px;margin-bottom:16px">🔐</div>
+<div style="font-size:20px;font-weight:600;color:#e0e0e0;margin-bottom:24px">主播数据看板</div>
+<input type="text" id="loginUser" placeholder="用户名" style="width:100%;padding:10px;margin-bottom:10px;background:#243447;border:1px solid #2a3a4a;color:#e0e0e0;border-radius:6px;font-size:14px;outline:none">
+<input type="password" id="loginPass" placeholder="密码" style="width:100%;padding:10px;margin-bottom:16px;background:#243447;border:1px solid #2a3a4a;color:#e0e0e0;border-radius:6px;font-size:14px;outline:none" onkeydown="if(event.key==='Enter')doLogin()">
+<button onclick="doLogin()" style="width:100%;padding:10px;background:#42a5f5;border:none;color:#fff;border-radius:6px;font-size:14px;cursor:pointer;font-weight:600">登 录</button>
+<div id="loginErr" style="color:#ef5350;font-size:12px;margin-top:10px;display:none">用户名或密码错误</div>
+</div></div>
+
 <div class="header"><h1>🎙️ 主播数据看板</h1></div>
 
 <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
@@ -114,6 +124,23 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Microsoft YaHei',sans-serif;b
   xhr.onerror = function(){};
   xhr.send();
 })();
+
+// ===== 登录验证 =====
+(function(){
+  if(sessionStorage.getItem('dash_login')==='ok'){
+    document.getElementById('loginOverlay').style.display='none';
+  }
+})();
+function doLogin(){
+  var u=document.getElementById('loginUser').value;
+  var p=document.getElementById('loginPass').value;
+  if(u==='admin' && p==='aming2019'){
+    sessionStorage.setItem('dash_login','ok');
+    document.getElementById('loginOverlay').style.display='none';
+  }else{
+    document.getElementById('loginErr').style.display='block';
+  }
+}
 
 var SUMMARY=[], DAILY=[];
 
